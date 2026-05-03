@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+// Extend Window interface for chatbot properties
+declare global {
+  interface Window {
+    chatbotHumanRequest?: boolean;
+    chatbotDepartments?: string[];
+    chatbotSelectedDepartment?: string;
+    chatbotLastUserMessage?: string;
+    chatbotWaitingForConcerns?: boolean;
+    chatbotUserConcerns?: string;
+  }
+}
+
 const FlowiseChatbot = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -59,8 +71,34 @@ const FlowiseChatbot = () => {
 
     window.addEventListener("chatbot-redirect-ticket", handleChatbotTicketRedirect);
 
+    // Handle department-specific ticket redirect
+    const handleChatbotTicketRedirectWithDepartment = (event: CustomEvent) => {
+      const isGuest = localStorage.getItem("uc_guest") === "1";
+      if (isGuest) {
+        navigate("/register");
+        return;
+      }
+
+      const department = event.detail?.department;
+      const isOnStudentDashboard = location.pathname === "/dashboard" || location.pathname === "/StudentDashboard";
+      if (isOnStudentDashboard) {
+        openStudentTicketDialog();
+        // Store department for ticket creation
+        window.chatbotSelectedDepartment = department;
+        return;
+      }
+
+      navigate("/dashboard");
+      // Allow dashboard to mount, then open the New Ticket dialog with department
+      window.chatbotSelectedDepartment = department;
+      window.setTimeout(openStudentTicketDialog, 250);
+    };
+
+    window.addEventListener("chatbot-redirect-ticket-with-department", handleChatbotTicketRedirectWithDepartment);
+
     return () => {
       window.removeEventListener("chatbot-redirect-ticket", handleChatbotTicketRedirect);
+      window.removeEventListener("chatbot-redirect-ticket-with-department", handleChatbotTicketRedirectWithDepartment);
     };
   }, [location.pathname, navigate]);
 
@@ -160,7 +198,7 @@ const FlowiseChatbot = () => {
     const originalFetch = window.fetch.bind(window);
     const starterPrompts = isStaffOrAdmin
       ? []
-      : ["How do I create a ticket?", "How do I check my ticket status?"];
+      : ["How do I create a ticket?", "How do I check my ticket status?", "Can I talk to a human?"];
     const persistChatHistory = async (
       message: string,
       role: "user" | "assistant",
@@ -193,6 +231,8 @@ const FlowiseChatbot = () => {
       /^(yes|yep|yeah|sure|ok|okay|please|i agree|agree|go ahead|do it|yes please)\b/i.test(text.trim());
     const asksToSubmitTicket = (text: string) =>
       /(would you like|do you want|can i).{0,35}(submit|create|open).{0,20}ticket|submit a ticket\?/i.test(text);
+    const wantsHumanIntent = (text: string) =>
+      /can i talk to a human|talk to human|speak to human|human agent|real person|talk to person/i.test(text);
 
     const extractBotText = (payload: any): string => {
       if (!payload) return "";
@@ -248,6 +288,102 @@ const FlowiseChatbot = () => {
               ) {
                 ticketPromptPendingRef.current = false;
                 window.dispatchEvent(new Event("chatbot-redirect-ticket"));
+              }
+
+              // Handle human request
+              if (wantsHumanIntent(cleanUserMessage)) {
+                // Store the human request for department selection
+                window.chatbotHumanRequest = true;
+                
+                // Fetch departments
+                try {
+                  const deptResponse = await originalFetch(`${API_URL}/api/departments`);
+                  if (deptResponse.ok) {
+                    const deptData = await deptResponse.json();
+                    if (deptData.departments && deptData.departments.length > 0) {
+                      const deptList = deptData.departments.map((dept: string, index: number) => 
+                        `${index + 1}. ${dept}`
+                      ).join('\n');
+                      
+                      // Send department list response
+                      const chatbotElement = document.querySelector('[id*="flowise"] iframe') as HTMLIFrameElement;
+                      if (chatbotElement && chatbotElement.contentWindow) {
+                        chatbotElement.contentWindow.postMessage({
+                          type: 'message',
+                          message: `What department?\n\n${deptList}\n\nPlease type the department name or number.`
+                        }, '*');
+                      }
+                      
+                      // Store departments for later processing
+                      window.chatbotDepartments = deptData.departments;
+                      return; // Don't proceed with original Flowise response
+                    }
+                  }
+                } catch (error) {
+                  console.error('Failed to fetch departments:', error);
+                }
+              }
+
+              // Handle department selection after human request
+              if (window.chatbotHumanRequest && window.chatbotDepartments) {
+                const selectedDept = cleanUserMessage.toLowerCase().trim();
+                const matchedDept = window.chatbotDepartments.find((dept: string) => 
+                  dept.toLowerCase() === selectedDept ||
+                  dept.toLowerCase().includes(selectedDept) ||
+                  selectedDept.includes(dept.toLowerCase())
+                );
+                
+                if (matchedDept) {
+                  // Store selected department and ask for concerns
+                  window.chatbotSelectedDepartment = matchedDept;
+                  window.chatbotHumanRequest = false;
+                  window.chatbotDepartments = null;
+                  window.chatbotWaitingForConcerns = true;
+                  
+                  // Ask for concerns
+                  const chatbotElement = document.querySelector('[id*="flowise"] iframe') as HTMLIFrameElement;
+                  if (chatbotElement && chatbotElement.contentWindow) {
+                    chatbotElement.contentWindow.postMessage({
+                      type: 'message',
+                      message: `Great! I'll connect you with the ${matchedDept} department. What is your concern?`
+                    }, '*');
+                  }
+                  return; // Don't proceed with original Flowise response
+                }
+              }
+
+              // Handle concerns input after department selection
+              if (window.chatbotWaitingForConcerns && window.chatbotSelectedDepartment) {
+                const concerns = cleanUserMessage.trim();
+                if (concerns) {
+                  // Store concerns and initiate live chat
+                  window.chatbotUserConcerns = concerns;
+                  window.chatbotWaitingForConcerns = false;
+                  
+                  const department = window.chatbotSelectedDepartment;
+                  
+                  // Send redirecting message
+                  const chatbotElement = document.querySelector('[id*="flowise"] iframe') as HTMLIFrameElement;
+                  if (chatbotElement && chatbotElement.contentWindow) {
+                    chatbotElement.contentWindow.postMessage({
+                      type: 'message',
+                      message: `Redirecting to a live staff from ${department} department...`
+                    }, '*');
+                  }
+                  
+                  // Initiate live chat
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('initiate-live-chat', {
+                      detail: {
+                        department: department,
+                        concerns: concerns,
+                        userId: accountScope
+                      }
+                    }));
+                  }, 2000);
+                  
+                  return; // Don't proceed with original Flowise response
+                }
               }
             }
             const nextBody = {

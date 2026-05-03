@@ -3670,6 +3670,29 @@ app.post('/api/faqs/search', async (req: Request, res: Response) => {
   }
 });
 
+// Get all departments for human request
+app.get('/api/departments', async (req: Request, res: Response) => {
+  try {
+    // Get unique departments from users table and tickets table
+    const [userDepartments] = await db.query('SELECT DISTINCT department FROM users WHERE department IS NOT NULL AND department != ""');
+    const [ticketDepartments] = await db.query('SELECT DISTINCT department FROM tickets WHERE department IS NOT NULL AND department != ""');
+    
+    // Combine and deduplicate departments
+    const allDepartments = new Set();
+    userDepartments.forEach((row: any) => allDepartments.add(row.department));
+    ticketDepartments.forEach((row: any) => allDepartments.add(row.department));
+    
+    // Convert to array and sort alphabetically
+    const sortedDepartments = Array.from(allDepartments).sort((a: any, b: any) => 
+      String(a).toLowerCase().localeCompare(String(b).toLowerCase())
+    );
+    
+    res.json({ departments: sortedDepartments });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch departments', details: error.message });
+  }
+});
+
 app.post('/api/faqs', async (req: Request, res: Response) => {
   const { question, answer } = req.body;
   if (!question || !answer) {

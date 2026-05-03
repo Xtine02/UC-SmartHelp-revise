@@ -122,7 +122,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<"csv" | "pdf">("csv");
-  const [exportTab, setExportTab] = useState<"department" | "accounts" | "feedback">("department");
+  const [exportTab, setExportTab] = useState<"department" | "accounts" | "feedback" | "faqs">("department");
   const [chatbotAnalytics, setChatbotAnalytics] = useState<ChatbotAnalytics>({
     totalMessages: 0,
     activeUsers: 0,
@@ -270,7 +270,7 @@ const AdminDashboard = () => {
   };
 
   const exportRowsByView = async (
-    targetTab: "department" | "accounts" | "feedback"
+    targetTab: "department" | "accounts" | "feedback" | "faqs"
   ): Promise<{ title: string; headers: string[]; rows: string[][] }> => {
     const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
     if (targetTab === "department") {
@@ -319,6 +319,21 @@ const AdminDashboard = () => {
           f.is_helpful ? "Helpful" : "Not Helpful",
           f.comment || "",
           f.date_submitted || f.created_at || "",
+        ]),
+      };
+    }
+
+    if (targetTab === "faqs") {
+      const faqRes = await fetch(`${API_URL}/api/faqs`);
+      const faqData = faqRes.ok ? await faqRes.json() : [];
+      return {
+        title: "FAQ Management",
+        headers: ["FAQ ID", "Question", "Answer", "Created At"],
+        rows: faqData.map((f: { faq_id?: number; question?: string; answer?: string; created_at?: string }) => [
+          String(f.faq_id || ""),
+          f.question || "",
+          f.answer || "",
+          f.created_at || "",
         ]),
       };
     }
@@ -389,13 +404,14 @@ const AdminDashboard = () => {
                   <div className="space-y-4">
                     <Select
                       value={exportTab}
-                      onValueChange={(v: "department" | "accounts" | "feedback") => setExportTab(v)}
+                      onValueChange={(v: "department" | "accounts" | "feedback" | "faqs") => setExportTab(v)}
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="department">Department Analytics</SelectItem>
-                        <SelectItem value="accounts">User Management</SelectItem>
+                        <SelectItem value="accounts">Account Management</SelectItem>
                         <SelectItem value="feedback">Feedback Analytics</SelectItem>
+                        <SelectItem value="faqs">FAQ Management</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select value={exportFormat} onValueChange={(v: "csv" | "pdf") => setExportFormat(v)}>
