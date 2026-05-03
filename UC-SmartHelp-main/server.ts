@@ -511,6 +511,20 @@ const initializeDatabase = async () => {
       console.error("Error creating notification tables:", err);
     }
 
+    // Create faqs table if not exists
+    try {
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS faqs (
+          faq_id INT AUTO_INCREMENT PRIMARY KEY,
+          question TEXT NOT NULL,
+          answer TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    } catch (err: unknown) {
+      console.error("Error creating faqs table:", err);
+    }
+
   } catch (err: unknown) {
     console.error("Database initialization error:", err);
   } finally {
@@ -3625,6 +3639,88 @@ setInterval(() => {
 
 // Also run on startup
 void checkOverdueTickets();
+
+// FAQ CRUD endpoints
+app.get('/api/faqs', async (req: Request, res: Response) => {
+  try {
+    const [rows] = await db.query('SELECT faq_id, question, answer, created_at FROM faqs ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch FAQs', details: error.message });
+  }
+});
+
+// FAQ search endpoint for chatbot fallback
+app.post('/api/faqs/search', async (req: Request, res: Response) => {
+  const { query } = req.body;
+  if (!query || typeof query !== 'string') {
+    return res.status(400).json({ error: 'Search query is required' });
+  }
+
+  try {
+    // Search for FAQs that match the query in question or answer
+    const [rows] = await db.query(
+      'SELECT faq_id, question, answer, created_at FROM faqs WHERE question LIKE ? OR answer LIKE ? ORDER BY created_at DESC',
+      [`%${query}%`, `%${query}%`]
+    );
+    
+    res.json({ results: rows, count: rows.length });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to search FAQs', details: error.message });
+  }
+});
+
+app.post('/api/faqs', async (req: Request, res: Response) => {
+  const { question, answer } = req.body;
+  if (!question || !answer) {
+    return res.status(400).json({ error: 'Question and answer are required' });
+  }
+  try {
+    const [result] = await db.query(
+      'INSERT INTO faqs (question, answer) VALUES (?, ?)',
+      [question, answer]
+    );
+    const insertResult = result as ResultSetHeader;
+    res.status(201).json({ faq_id: insertResult.insertId, message: 'FAQ created successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to create FAQ', details: error.message });
+  }
+});
+
+app.put('/api/faqs/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { question, answer } = req.body;
+  if (!question || !answer) {
+    return res.status(400).json({ error: 'Question and answer are required' });
+  }
+  try {
+    const [result] = await db.query(
+      'UPDATE faqs SET question = ?, answer = ? WHERE faq_id = ?',
+      [question, answer, id]
+    );
+    const updateResult = result as ResultSetHeader;
+    if (updateResult.affectedRows === 0) {
+      return res.status(404).json({ error: 'FAQ not found' });
+    }
+    res.json({ message: 'FAQ updated successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to update FAQ', details: error.message });
+  }
+});
+
+app.delete('/api/faqs/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const [result] = await db.query('DELETE FROM faqs WHERE faq_id = ?', [id]);
+    const deleteResult = result as ResultSetHeader;
+    if (deleteResult.affectedRows === 0) {
+      return res.status(404).json({ error: 'FAQ not found' });
+    }
+    res.json({ message: 'FAQ deleted successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to delete FAQ', details: error.message });
+  }
+});
 
 const PORT = 3000;
 app.listen(PORT, () => process.stdout.write(`Server running on port ${PORT}\n`));

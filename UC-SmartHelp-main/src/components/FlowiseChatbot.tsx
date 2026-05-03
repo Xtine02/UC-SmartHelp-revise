@@ -312,8 +312,53 @@ const FlowiseChatbot = () => {
           sessionId: "${accountScope}"
         },
         observersConfig: {
-          on_message: (response) => {
+          on_message: async (response) => {
             const messageText = (${extractBotText.toString()})(response);
+            
+            // Check if Flowise response indicates no answer found
+            if (String(messageText || "").toLowerCase().includes("i don't know") || 
+                String(messageText || "").toLowerCase().includes("i'm not sure") ||
+                String(messageText || "").toLowerCase().includes("i don't have information") ||
+                String(messageText || "").toLowerCase().includes("i cannot help") ||
+                String(messageText || "").toLowerCase().includes("no information available")) {
+              
+              // Try FAQ fallback search
+              try {
+                const lastUserMessage = window.chatbotLastUserMessage || "";
+                if (lastUserMessage.trim()) {
+                  const apiResponse = await fetch('http://localhost:3000/api/faqs/search', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: lastUserMessage })
+                  });
+                  
+                  if (apiResponse.ok) {
+                    const faqData = await apiResponse.json();
+                    if (faqData.results && faqData.results.length > 0) {
+                      // Found FAQ answer, display it
+                      const bestMatch = faqData.results[0];
+                      const faqAnswer = \`Based on our FAQ: \${bestMatch.answer}\`;
+                      
+                      // Update the chatbot response with FAQ answer
+                      const chatbotElement = document.querySelector('[id*="flowise"] iframe');
+                      if (chatbotElement && chatbotElement.contentWindow) {
+                        chatbotElement.contentWindow.postMessage({
+                          type: 'message',
+                          message: faqAnswer
+                        }, '*');
+                      }
+                      
+                      return; // Don't proceed with original Flowise response
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error('FAQ fallback search failed:', error);
+              }
+            }
+            
             if (String(messageText || "").toUpperCase().includes("REDIRECT_TICKET")) {
               window.dispatchEvent(new Event("chatbot-redirect-ticket"));
             }

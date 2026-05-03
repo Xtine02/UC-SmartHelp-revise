@@ -7,6 +7,7 @@ import TicketList from "@/components/tickets/TicketList";
 import ReviewAnalytics from "@/components/analytics/ReviewAnalytics";
 import AccountManagement from "@/components/admin/AccountManagement";
 import AuditTrail from "@/components/admin/AuditTrail";
+import FAQManagement from "@/components/admin/FAQManagement";
 import ChatHistoryPage from "@/pages/ChatHistoryPage";
 import ChatIsolationTest from "@/components/ChatIsolationTest";
 import Navbar from "@/components/Navbar";
@@ -115,7 +116,7 @@ const AdminDashboard = () => {
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"department" | "tickets" | "accounts" | "audit" | "feedback" | "chatbot" | "chat-history">("department");
+  const [view, setView] = useState<"department" | "tickets" | "accounts" | "audit" | "feedback" | "chatbot" | "chat-history" | "faq">("department");
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
     const [showDeptDialog, setShowDeptDialog] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -137,6 +138,7 @@ const AdminDashboard = () => {
     { key: "accounts", label: "User Management" },
     { key: "feedback", label: "Feedback Analytic" },
     { key: "chat-history", label: "Chat History" },
+    { key: "faq", label: "FAQ Management" },
   ] as const;
   const lastUpdateRef = useRef<string>("");
 
@@ -604,6 +606,7 @@ const AdminDashboard = () => {
             )}
             {view === "accounts" && <AccountManagement />}
             {view === "feedback" && <ReviewAnalytics userDepartment={user?.department} userRole={user?.role} />}
+            {view === "faq" && <FAQManagement />}
             {view === "chat-history" && (
               <div className="p-6">
                 <ChatHistoryPage />

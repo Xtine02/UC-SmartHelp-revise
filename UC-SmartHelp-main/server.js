@@ -295,6 +295,69 @@ app.delete('/api/users/:id', async (req, res) => {
   }
 });
 
+// FAQ CRUD endpoints
+app.get('/api/faqs', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT faq_id, question, answer, created_at FROM faqs ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching FAQs:', error);
+    res.status(500).json({ error: 'Failed to fetch FAQs', details: error.message });
+  }
+});
+
+app.post('/api/faqs', async (req, res) => {
+  const { question, answer } = req.body;
+  if (!question || !answer) {
+    return res.status(400).json({ error: 'Question and answer are required' });
+  }
+  try {
+    const [result] = await db.query(
+      'INSERT INTO faqs (question, answer) VALUES (?, ?)',
+      [question, answer]
+    );
+    res.status(201).json({ faq_id: result.insertId, message: 'FAQ created successfully' });
+  } catch (error) {
+    console.error('Error creating FAQ:', error);
+    res.status(500).json({ error: 'Failed to create FAQ', details: error.message });
+  }
+});
+
+app.put('/api/faqs/:id', async (req, res) => {
+  const { id } = req.params;
+  const { question, answer } = req.body;
+  if (!question || !answer) {
+    return res.status(400).json({ error: 'Question and answer are required' });
+  }
+  try {
+    const [result] = await db.query(
+      'UPDATE faqs SET question = ?, answer = ? WHERE faq_id = ?',
+      [question, answer, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'FAQ not found' });
+    }
+    res.json({ message: 'FAQ updated successfully' });
+  } catch (error) {
+    console.error('Error updating FAQ:', error);
+    res.status(500).json({ error: 'Failed to update FAQ', details: error.message });
+  }
+});
+
+app.delete('/api/faqs/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [result] = await db.query('DELETE FROM faqs WHERE faq_id = ?', [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'FAQ not found' });
+    }
+    res.json({ message: 'FAQ deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting FAQ:', error);
+    res.status(500).json({ error: 'Failed to delete FAQ', details: error.message });
+  }
+});
+
 const PORT = 3000;
 app.listen(PORT, () => console.log(`server is running in port 3000`));
 
