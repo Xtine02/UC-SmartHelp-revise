@@ -90,7 +90,14 @@ const StudentDashboard = () => {
     };
     const handleOpenNewTicketDialog = () => {
       setShowNewTicket(true);
+      sessionStorage.removeItem("chatbot_open_new_ticket");
     };
+
+    const shouldOpenPendingTicket = sessionStorage.getItem("chatbot_open_new_ticket") === "1";
+    if (shouldOpenPendingTicket) {
+      setShowNewTicket(true);
+      sessionStorage.removeItem("chatbot_open_new_ticket");
+    }
 
     window.addEventListener("user-logout", handleLogout);
     window.addEventListener("storage", checkAuth);
